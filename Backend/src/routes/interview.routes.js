@@ -27,7 +27,7 @@ interviewRouter.get("/report/:interviewId", authMiddleware.authUser, interviewCo
  * @description get all interview reports of logged in user.
  * @access private
  */
-interviewRouter.get("/all", authMiddleware.authUser, interviewController.getAllInterviewReportsController)
+interviewRouter.get("/", authMiddleware.authUser, interviewController.getAllInterviewReportsController)
 
 
 /**

@@ -1,4 +1,4 @@
-import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf } from "../pages/sevices/interview.api"
+import { getAllInterviewReports, generateInterviewReport, getInterviewReportById, generateResumePdf } from "../services/interview.api"
 import { useContext, useEffect } from "react"
 import { InterviewContext } from "../interview.context"
 import { useParams } from "react-router"
@@ -27,7 +27,7 @@ export const useInterview = () => {
             setLoading(false)
         }
 
-        return  response? response.interviewReport : null
+        return response.interviewReport
     }
 
     const getReportById = async (interviewId) => {
@@ -56,14 +56,10 @@ export const useInterview = () => {
             setLoading(false)
         }
 
-        return response ? response.interviewReports : null
+        return response.interviewReports
     }
 
     const getResumePdf = async (interviewReportId) => {
-        if(!interviewReportId){
-            console.log("no interviewReport provided!")
-            return
-        }
         setLoading(true)
         let response = null
         try {

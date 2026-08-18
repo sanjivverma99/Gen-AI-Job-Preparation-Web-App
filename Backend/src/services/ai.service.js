@@ -36,21 +36,120 @@ async function generateInterviewReport({ resume, selfDescription, jobDescription
 
 
     const prompt = `Generate an interview report for a candidate with the following details:
-                        Resume: ${resume}
-                        Self Description: ${selfDescription}
-                        Job Description: ${jobDescription}
-`
+Resume: ${resume}
+Self Description: ${selfDescription}
+Job Description: ${jobDescription}
+
+Respond with ONLY a valid JSON object in EXACTLY this structure (no markdown, no extra text):
+
+{
+  "title": "Java Full Stack Developer",
+  "matchScore": 85,
+  "technicalQuestions": [
+    { "question": "Explain REST API design.", "intention": "Test API knowledge.", "answer": "Discuss statelessness, HTTP methods..." }
+  ],
+  "behavioralQuestions": [
+    { "question": "Describe a challenge you faced.", "intention": "Assess problem-solving.", "answer": "STAR method response..." }
+  ],
+  "skillGaps": [
+    { "skill": "Unit Testing", "severity": "medium" }
+  ],
+  "preparationPlan": [
+    { "day": 1, "focus": "Core Java Review", "tasks": ["Review OOP concepts", "Practice coding problems"] }
+  ]
+}
+
+Generate 5 technicalQuestions, 3 behavioralQuestions, 3 skillGaps, and 5 preparationPlan days, following this EXACT structure with these EXACT field names and types. skillGaps and preparationPlan items MUST be objects, not plain strings.`
 
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model:"gemini-2.5-flash",
         contents: prompt,
         config: {
-            responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(interviewReportSchema),
-        }
+    responseMimeType: "application/json",
+    responseSchema: zodToJsonSchema(interviewReportSchema, { target: "openApi3" }),
+    temperature: 0.3
+}
     })
+    console.log("AI response: ", response.text)
+    const parsed = JSON.parse(response.text);
 
-    return JSON.parse(response.text)
+if (Array.isArray(parsed.skillGaps)) {
+    parsed.skillGaps = parsed.skillGaps.map(item =>
+        typeof item === "string" ? { skill: item, severity: "medium" } : item
+    );
+}
+
+if (Array.isArray(parsed.preparationPlan)) {
+    parsed.preparationPlan = parsed.preparationPlan.map((item, index) =>
+        typeof item === "string" ? { day: index + 1, focus: item, tasks: [item] } : item
+    );
+}
+
+// Normalize technicalQuestions
+if (Array.isArray(parsed.technicalQuestions)) {
+    parsed.technicalQuestions = parsed.technicalQuestions.map(item => {
+        if (typeof item === "string") {
+            return { question: item, intention: "Assess relevant knowledge and experience.", answer: "Candidate should explain their approach with specific examples." };
+        }
+        return item;
+    });
+}
+
+// Normalize behavioralQuestions
+if (Array.isArray(parsed.behavioralQuestions)) {
+    parsed.behavioralQuestions = parsed.behavioralQuestions.map(item => {
+        if (typeof item === "string") {
+            return { question: item, intention: "Assess soft skills and past experience.", answer: "Candidate should use the STAR method to answer." };
+        }
+        return item;
+    });
+}
+
+// Normalize skillGaps
+if (Array.isArray(parsed.skillGaps)) {
+    parsed.skillGaps = parsed.skillGaps.map(item => {
+        if (typeof item === "string") {
+            return { skill: item, severity: "medium" };
+        }
+        return item;
+    });
+}
+
+// Normalize preparationPlan
+if (Array.isArray(parsed.preparationPlan)) {
+    parsed.preparationPlan = parsed.preparationPlan.map((item, index) => {
+        if (typeof item === "string") {
+            return { day: index + 1, focus: item, tasks: [item] };
+        }
+        return item;
+    });
+}
+
+return parsed;
+
+return parsed;
+
+// Normalize skillGaps - agar strings hain to objects mein convert karo
+if (Array.isArray(parsed.skillGaps)) {
+    parsed.skillGaps = parsed.skillGaps.map(item => {
+        if (typeof item === "string") {
+            return { skill: item, severity: "medium" };
+        }
+        return item;
+    });
+}
+
+// Normalize preparationPlan - agar strings hain to objects mein convert karo
+if (Array.isArray(parsed.preparationPlan)) {
+    parsed.preparationPlan = parsed.preparationPlan.map((item, index) => {
+        if (typeof item === "string") {
+            return { day: index + 1, focus: item, tasks: [item] };
+        }
+        return item;
+    });
+}
+
+return parsed;
 
 
 }
@@ -100,7 +199,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
         contents: prompt,
         config: {
             responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(resumePdfSchema),
+            responseSchema: zodToJsonSchema(resumePdfSchema),target: "openApi3",
         }
     })
 

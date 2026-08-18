@@ -1,34 +1,34 @@
-import {useContext,useEffect} from "react"
-import {AuthContext} from "../auth.context.jsx"
-import {login,register,logout,postme} from "../services/auth.api"
+import { useContext, useEffect } from "react";
+import { AuthContext } from "../auth.context";
+import { login, register, logout, getMe } from "../services/auth.api";
+
 
 
 export const useAuth = () => {
-    const context = useContext(AuthContext)
-    if (!context) {
-        throw new Error("useAuth must be used within an AuthProvider")
-    }
-    const {user,setUser,loading,setLoading} = context
 
-    const handleLogin = async (email,password) => {
+    const context = useContext(AuthContext)
+    const { user, setUser, loading, setLoading } = context
+
+
+    const handleLogin = async ({ email, password }) => {
         setLoading(true)
         try {
-            const data = await login(email,password)
+            const data = await login({ email, password })
             setUser(data.user)
-        } catch (error) {
-            console.error("Login failed:", error)
+        } catch (err) {
+
         } finally {
             setLoading(false)
         }
     }
 
-    const handleRegister = async (username,email,password) => {
+    const handleRegister = async ({ username, email, password }) => {
         setLoading(true)
         try {
-            const data = await register(username,email,password)
+            const data = await register({ username, email, password })
             setUser(data.user)
-        } catch (error) {
-            console.error("Registration failed:", error)
+        } catch (err) {
+
         } finally {
             setLoading(false)
         }
@@ -37,29 +37,30 @@ export const useAuth = () => {
     const handleLogout = async () => {
         setLoading(true)
         try {
-            await logout()
+            const data = await logout()
             setUser(null)
-        } catch (error) {
-            console.error("Logout failed:", error)
+        } catch (err) {
+
         } finally {
             setLoading(false)
         }
     }
 
-  useEffect(()=>{
-        const postAndSetUser = async ()=>{
-            try{
-            const data = await postme()
-            setUser(data.user)
-            }catch(err){}finally{
-                
-            setLoading(false)
+    useEffect(() => {
+
+        const getAndSetUser = async () => {
+            try {
+
+                const data = await getMe()
+                setUser(data.user)
+            } catch (err) { } finally {
+                setLoading(false)
             }
         }
 
-        postAndSetUser()
+        getAndSetUser()
 
-    },[])
+    }, [])
 
-    return {user,loading,handleLogin,handleRegister,handleLogout}
+    return { user, loading, handleRegister, handleLogin, handleLogout }
 }

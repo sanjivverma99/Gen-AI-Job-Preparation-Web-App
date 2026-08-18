@@ -17,7 +17,7 @@ import {useAuth} from '../hooks/useAuth'
     const handleSubmit = async (e) => {
         e.preventDefault();
         // Handle login logic here
-        await handleLogin(email,password)
+        await handleLogin({email,password})
         navigate('/')
     }
 
