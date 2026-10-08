@@ -10,23 +10,41 @@ const interviewReportModel = require("../models/interviewReport.model")
  */
 async function generateInterViewReportController(req, res) {
 
-    const resumeContent = await (new pdfParse.PDFParse(Uint8Array.from(req.file.buffer))).getText()
-    const { selfDescription, jobDescription } = req.body
+    const jobDescription = typeof req.body.jobDescription === "string" ? req.body.jobDescription.trim() : ""
+    const selfDescription = typeof req.body.selfDescription === "string" ? req.body.selfDescription.trim() : ""
+
+    if (!jobDescription) {
+        return res.status(400).json({
+            message: "Please provide a job description."
+        })
+    }
+
+    if (!req.file && !selfDescription) {
+        return res.status(400).json({
+            message: "Please upload a PDF resume or provide a self-description."
+        })
+    }
+
+    let resume = ""
+    if (req.file) {
+        const resumeContent = await (new pdfParse.PDFParse(Uint8Array.from(req.file.buffer))).getText()
+        resume = resumeContent.text
+    }
 
     const interViewReportByAi = await generateInterviewReport({
-        resume: resumeContent.text,
+        resume,
         selfDescription,
         jobDescription
         
     })
     
     const interviewReport = await interviewReportModel.create({
+        ...interViewReportByAi,
         user: req.user.id,
         title: jobDescription.slice(0,50),
-        resume: resumeContent.text,
+        resume,
         selfDescription,
-        jobDescription,
-        ...interViewReportByAi
+        jobDescription
     })
 
     res.status(201).json({

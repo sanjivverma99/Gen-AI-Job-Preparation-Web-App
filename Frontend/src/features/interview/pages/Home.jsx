@@ -9,18 +9,43 @@ const Home = () => {
     const { loading, generateReport, reports } = useInterview()
     const [jobDescription, setJobDescription] = useState("")
     const [selfDescription, setSelfDescription] = useState("")
+    const [generationError, setGenerationError] = useState("")
     const resumeInputRef = useRef()
 
-    const { user, logout } = useAuth()
+    const { user, handleLogout } = useAuth()
 
     const [resumeFileName, setResumeFileName] = useState("")
 
     const navigate = useNavigate()
 
     const handleGenerateReport = async () => {
-        const resumeFile = resumeInputRef.current.files[ 0 ]
-        const data = await generateReport({ jobDescription, selfDescription, resumeFile })
-        navigate(`/interview/${data._id}`)
+        setGenerationError("")
+        const resumeFile = resumeInputRef.current.files[0]
+
+        if (!jobDescription.trim()) {
+            setGenerationError("Please provide a job description.")
+            return
+        }
+
+        if (!resumeFile && !selfDescription.trim()) {
+            setGenerationError("Upload a PDF resume or provide a self-description.")
+            return
+        }
+
+        try {
+            const data = await generateReport({ jobDescription, selfDescription, resumeFile })
+            if (!data?._id) {
+                throw new Error("The server did not return an interview report.")
+            }
+            navigate(`/interview/${data._id}`)
+        } catch (error) {
+            console.error("Unable to generate interview report:", error)
+            setGenerationError(
+                error.code === "ERR_NETWORK"
+                    ? "Could not connect to the backend. Make sure the backend server is running at http://localhost:3000."
+                    : error.response?.data?.message || error.message || "Unable to generate your interview plan."
+            )
+        }
     }
 
     if (loading) {
@@ -88,10 +113,14 @@ const Home = () => {
                 <hr />
                 <button
                     type="button"
-                    onClick={() => {
-                        logout()
-                        setShowProfileMenu(false)
-                        navigate("/login")
+                    onClick={async () => {
+                        try {
+                            await handleLogout()
+                            setShowProfileMenu(false)
+                            navigate("/login")
+                        } catch (error) {
+                            setGenerationError(error.response?.data?.message || "Unable to sign out. Please try again.")
+                        }
                     }}
                 >
                     Logout
@@ -141,9 +170,9 @@ const Home = () => {
                                     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="16 16 12 12 8 16" /><line x1="12" y1="12" x2="12" y2="21" /><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" /></svg>
                                 </span>
                                 <p className='dropzone__title'>Click to upload or drag &amp; drop</p>
-                                <p className='dropzone__subtitle'>PDF or DOCX (Max 5MB)</p>
+                                <p className='dropzone__subtitle'>PDF (Max 5MB)</p>
 
-                                <input ref={resumeInputRef} hidden type='file' id='resume' name='resume'
+                                <input ref={resumeInputRef} hidden type='file' id='resume' name='resume' accept='.pdf,application/pdf'
                                     onChange={(e) => setResumeFileName(e.target.files[0]?.name || "")} />
                             </label>
                         </div>
@@ -184,6 +213,12 @@ const Home = () => {
                     </button>
                 </div>
             </div>
+
+            {generationError && (
+                <p className='generation-error' role='alert'>
+                    {generationError}
+                </p>
+            )}
 
             {/* Recent Reports List */}
             {reports.length > 0 && (

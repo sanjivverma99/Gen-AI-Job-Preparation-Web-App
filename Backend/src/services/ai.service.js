@@ -1,11 +1,16 @@
 const { GoogleGenAI } = require("@google/genai")
 const { z } = require("zod")
-const { zodToJsonSchema } = require("zod-to-json-schema")
 const puppeteer = require("puppeteer")
 
 const ai = new GoogleGenAI({
     apiKey: process.env.GOOGLE_GENAI_API_KEY
 })
+
+function toGoogleJsonSchema(schema) {
+    const jsonSchema = z.toJSONSchema(schema, { target: "draft-7" })
+    delete jsonSchema.$schema
+    return jsonSchema
+}
 
 
 const interviewReportSchema = z.object({
@@ -34,7 +39,6 @@ const interviewReportSchema = z.object({
 
 async function generateInterviewReport({ resume, selfDescription, jobDescription }) {
 
-
     const prompt = `Generate an interview report for a candidate with the following details:
 Resume: ${resume}
 Self Description: ${selfDescription}
@@ -61,96 +65,85 @@ Respond with ONLY a valid JSON object in EXACTLY this structure (no markdown, no
 
 Generate 5 technicalQuestions, 3 behavioralQuestions, 3 skillGaps, and 5 preparationPlan days, following this EXACT structure with these EXACT field names and types. skillGaps and preparationPlan items MUST be objects, not plain strings.`
 
-    const response = await ai.models.generateContent({
-        model:"gemini-2.5-flash",
-        contents: prompt,
-        config: {
-    responseMimeType: "application/json",
-    responseSchema: zodToJsonSchema(interviewReportSchema, { target: "openApi3" }),
-    temperature: 0.3
-}
+    let response
+    try {
+        response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: prompt,
+            config: {
+                responseMimeType: "application/json",
+                responseJsonSchema: toGoogleJsonSchema(interviewReportSchema),
+                temperature: 0.3
+            }
+        })
+    } catch (error) {
+        error.publicMessage = "The AI report service is unavailable. Please try again later."
+        error.status = 502
+        throw error
+    }
+
+    let parsed
+    try {
+        parsed = JSON.parse(response.text)
+    } catch (error) {
+        error.publicMessage = "The AI service returned an invalid report. Please try again."
+        error.status = 502
+        throw error
+    }
+
+    const parseJsonItems = (items) => items.map((item) => {
+        if (typeof item !== "string") {
+            return item
+        }
+
+        try {
+            return JSON.parse(item)
+        } catch {
+            return item
+        }
     })
-    console.log("AI response: ", response.text)
-    const parsed = JSON.parse(response.text);
 
-if (Array.isArray(parsed.skillGaps)) {
-    parsed.skillGaps = parsed.skillGaps.map(item =>
-        typeof item === "string" ? { skill: item, severity: "medium" } : item
-    );
-}
-
-if (Array.isArray(parsed.preparationPlan)) {
-    parsed.preparationPlan = parsed.preparationPlan.map((item, index) =>
-        typeof item === "string" ? { day: index + 1, focus: item, tasks: [item] } : item
-    );
-}
-
-// Normalize technicalQuestions
-if (Array.isArray(parsed.technicalQuestions)) {
-    parsed.technicalQuestions = parsed.technicalQuestions.map(item => {
-        if (typeof item === "string") {
-            return { question: item, intention: "Assess relevant knowledge and experience.", answer: "Candidate should explain their approach with specific examples." };
+    for (const key of [ "technicalQuestions", "behavioralQuestions", "skillGaps", "preparationPlan" ]) {
+        if (Array.isArray(parsed[key])) {
+            parsed[key] = parseJsonItems(parsed[key])
         }
-        return item;
-    });
-}
+    }
 
-// Normalize behavioralQuestions
-if (Array.isArray(parsed.behavioralQuestions)) {
-    parsed.behavioralQuestions = parsed.behavioralQuestions.map(item => {
-        if (typeof item === "string") {
-            return { question: item, intention: "Assess soft skills and past experience.", answer: "Candidate should use the STAR method to answer." };
-        }
-        return item;
-    });
-}
+    if (Array.isArray(parsed.technicalQuestions)) {
+        parsed.technicalQuestions = parsed.technicalQuestions.map(item =>
+            typeof item === "string"
+                ? { question: item, intention: "Assess relevant knowledge and experience.", answer: "Explain your approach using specific examples." }
+                : item
+        )
+    }
 
-// Normalize skillGaps
-if (Array.isArray(parsed.skillGaps)) {
-    parsed.skillGaps = parsed.skillGaps.map(item => {
-        if (typeof item === "string") {
-            return { skill: item, severity: "medium" };
-        }
-        return item;
-    });
-}
+    if (Array.isArray(parsed.behavioralQuestions)) {
+        parsed.behavioralQuestions = parsed.behavioralQuestions.map(item =>
+            typeof item === "string"
+                ? { question: item, intention: "Assess soft skills and past experience.", answer: "Use the STAR method to describe a relevant example." }
+                : item
+        )
+    }
 
-// Normalize preparationPlan
-if (Array.isArray(parsed.preparationPlan)) {
-    parsed.preparationPlan = parsed.preparationPlan.map((item, index) => {
-        if (typeof item === "string") {
-            return { day: index + 1, focus: item, tasks: [item] };
-        }
-        return item;
-    });
-}
+    if (Array.isArray(parsed.skillGaps)) {
+        parsed.skillGaps = parsed.skillGaps.map(item =>
+            typeof item === "string" ? { skill: item, severity: "medium" } : item
+        )
+    }
 
-return parsed;
+    if (Array.isArray(parsed.preparationPlan)) {
+        parsed.preparationPlan = parsed.preparationPlan.map((item, index) =>
+            typeof item === "string" ? { day: index + 1, focus: item, tasks: [ item ] } : item
+        )
+    }
 
-return parsed;
-
-// Normalize skillGaps - agar strings hain to objects mein convert karo
-if (Array.isArray(parsed.skillGaps)) {
-    parsed.skillGaps = parsed.skillGaps.map(item => {
-        if (typeof item === "string") {
-            return { skill: item, severity: "medium" };
-        }
-        return item;
-    });
-}
-
-// Normalize preparationPlan - agar strings hain to objects mein convert karo
-if (Array.isArray(parsed.preparationPlan)) {
-    parsed.preparationPlan = parsed.preparationPlan.map((item, index) => {
-        if (typeof item === "string") {
-            return { day: index + 1, focus: item, tasks: [item] };
-        }
-        return item;
-    });
-}
-
-return parsed;
-
+    try {
+        return interviewReportSchema.parse(parsed)
+    } catch (error) {
+        error.publicMessage = "The AI service returned an incomplete report. Please try again."
+        error.status = 502
+        throw error
+    }
 
 }
 
@@ -158,21 +151,22 @@ return parsed;
 
 async function generatePdfFromHtml(htmlContent) {
     const browser = await puppeteer.launch()
-    const page = await browser.newPage();
-    await page.setContent(htmlContent, { waitUntil: "networkidle0" })
+    try {
+        const page = await browser.newPage()
+        await page.setContent(htmlContent, { waitUntil: "networkidle0" })
 
-    const pdfBuffer = await page.pdf({
-        format: "A4", margin: {
-            top: "20mm",
-            bottom: "20mm",
-            left: "15mm",
-            right: "15mm"
-        }
-    })
-
-    await browser.close()
-
-    return pdfBuffer
+        return await page.pdf({
+            format: "A4",
+            margin: {
+                top: "20mm",
+                bottom: "20mm",
+                left: "15mm",
+                right: "15mm"
+            }
+        })
+    } finally {
+        await browser.close()
+    }
 }
 
 async function generateResumePdf({ resume, selfDescription, jobDescription }) {
@@ -199,7 +193,7 @@ async function generateResumePdf({ resume, selfDescription, jobDescription }) {
         contents: prompt,
         config: {
             responseMimeType: "application/json",
-            responseSchema: zodToJsonSchema(resumePdfSchema),target: "openApi3",
+            responseJsonSchema: toGoogleJsonSchema(resumePdfSchema)
         }
     })
 

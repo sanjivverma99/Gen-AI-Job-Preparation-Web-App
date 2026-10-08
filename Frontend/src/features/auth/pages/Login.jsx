@@ -13,12 +13,17 @@ import {useAuth} from '../hooks/useAuth'
 
     const [email,setEmail] = useState("")
     const [password,setPassword] = useState("")
+    const [error,setError] = useState("")
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        // Handle login logic here
-        await handleLogin({email,password})
-        navigate('/')
+        setError("")
+        try {
+            await handleLogin({email,password})
+            navigate('/')
+        } catch (err) {
+            setError(err.response?.data?.message || "Unable to sign in. Please try again.")
+        }
     }
 
     if(loading) {
@@ -43,6 +48,7 @@ import {useAuth} from '../hooks/useAuth'
                     onChange={(e) => setPassword(e.target.value)}
                     type="password" id="password" name="password" placeholder="Enter your password" />
                 </div>
+                {error && <p role="alert">{error}</p>}
                 <button className="button primary-button">Login</button>
             </form>
 
